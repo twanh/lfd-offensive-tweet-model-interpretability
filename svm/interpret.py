@@ -46,6 +46,7 @@ def main() -> int:
     feature_names = vectorizer.get_feature_names_out()
     class_labels = model.classes_
 
+    # Get model coefficients
     if hasattr(model, 'coef_'):
         coefs = model.coef_[0].toarray()[0]
     else:
@@ -64,7 +65,6 @@ def main() -> int:
     print(f'Most indicative features for class: "{class_labels[0]}"')
     for idx in top_negative_indices:
         print(f'  - {feature_names[idx]:<20} (weight: {coefs[idx]:.4f})')
-    # Get top n features
 
     return 0
 
