@@ -57,11 +57,11 @@ def create_arg_parser() -> argparse.Namespace:
     # Core TrainingArguments
     parser.add_argument('--output-dir', default='./out')
     parser.add_argument('--num-train-epochs', type=int, default=1)
-    parser.add_argument('--per-device-train-batch_size', type=int, default=8)
-    parser.add_argument('--per-device-eval-batch_size', type=int, default=8)
+    parser.add_argument('--per-device-train-batch-size', type=int, default=8)
+    parser.add_argument('--per-device-eval-batch-size', type=int, default=8)
     parser.add_argument('--learning-rate', type=float, default=5e-5)
     parser.add_argument('--weight-decay', type=float, default=0.01)
-    parser.add_argument('--gradient-accumulation_steps', type=int, default=1)
+    parser.add_argument('--gradient-accumulation-steps', type=int, default=1)
     parser.add_argument(
         '--eval_strategy',
         choices=['no', 'steps', 'epoch'], default='epoch',
