@@ -51,36 +51,36 @@ def create_arg_parser() -> argparse.Namespace:
         type=str,
     )
 
-    parser.add_argument('--confusion_matrix', default=None)
-    parser.add_argument('--max_length', type=int, default=100)
+    parser.add_argument('--confusion-matrix', default=None)
+    parser.add_argument('--max-length', type=int, default=100)
 
     # Core TrainingArguments
-    parser.add_argument('--output_dir', default='./out')
-    parser.add_argument('--num_train_epochs', type=int, default=1)
-    parser.add_argument('--per_device_train_batch_size', type=int, default=8)
-    parser.add_argument('--per_device_eval_batch_size', type=int, default=8)
-    parser.add_argument('--learning_rate', type=float, default=5e-5)
-    parser.add_argument('--weight_decay', type=float, default=0.01)
-    parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
+    parser.add_argument('--output-dir', default='./out')
+    parser.add_argument('--num-train-epochs', type=int, default=1)
+    parser.add_argument('--per-device-train-batch_size', type=int, default=8)
+    parser.add_argument('--per-device-eval-batch_size', type=int, default=8)
+    parser.add_argument('--learning-rate', type=float, default=5e-5)
+    parser.add_argument('--weight-decay', type=float, default=0.01)
+    parser.add_argument('--gradient-accumulation_steps', type=int, default=1)
     parser.add_argument(
         '--eval_strategy',
         choices=['no', 'steps', 'epoch'], default='epoch',
     )
-    parser.add_argument('--logging_steps', type=int, default=50)
-    parser.add_argument('--warmup_ratio', type=float, default=0.0)
-    parser.add_argument('--warmup_steps', type=int, default=0)
+    parser.add_argument('--logging-steps', type=int, default=50)
+    parser.add_argument('--warmup-ratio', type=float, default=0.0)
+    parser.add_argument('--warmup-steps', type=int, default=0)
     parser.add_argument('--seed', type=int, default=42)
 
     parser.add_argument(
-        '--early_stopping_patience', type=int,
+        '--early-stopping-patience', type=int,
         default=3, help='Patience for early stopping.',
     )
     parser.add_argument(
-        '--metric_for_best_model', type=str,
+        '--metric-for-best-model', type=str,
         default='eval_f1_macro', help='Metric to monitor for best model.',
     )
     parser.add_argument(
-        '--load_best_model_at_end', action='store_true',
+        '--load-best-model-at-end', action='store_true',
         help='Load the best model at the end of training.',
     )
 
