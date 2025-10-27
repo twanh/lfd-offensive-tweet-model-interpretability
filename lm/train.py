@@ -280,3 +280,7 @@ def main() -> int:
             print(f'Saving confusion matrix to {args.confusion_matrix}')
 
     return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
