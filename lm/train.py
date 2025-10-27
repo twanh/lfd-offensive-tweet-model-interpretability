@@ -24,7 +24,14 @@ def create_arg_parser() -> argparse.Namespace:
         description='Fine-tune a Transformer with Trainer',
     )
 
-    # Data / model arguments
+    # Model name
+    parser.add_argument(
+        'model_name',
+        help='The name of the pre-trained model to use',
+        type=str,
+    )
+
+    # Data arguments
     parser.add_argument(
         'train_file',
         help='The train file',
