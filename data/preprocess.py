@@ -47,11 +47,8 @@ def main() -> int:
     clean_tweets = []
 
     for tweet in tweets:
-        # Demojize the tweet
-        tweet = emoji.demojize(tweet, delimiters=(' ', ' '))
         # Lowercase the tweet
         tweet = tweet.lower()
-
         clean_tweets.append(tweet)
 
     # Write the preprocessed tweets and labels to output file
