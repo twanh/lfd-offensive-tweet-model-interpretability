@@ -352,3 +352,7 @@ def main():
         with open(os.path.join(args.model_dir, 'training_params.json'), 'w') as f:
             json.dump(params, f)
         print('Artifacts saved successfully.')
+
+
+if __name__ == '__main__':
+    main()
