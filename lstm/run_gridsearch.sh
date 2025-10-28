@@ -1,4 +1,4 @@
-#!bin/bash
+#!/bin/bash
 #SBATCH --job-name=lstm_offensive_grid_search
 #SBATCH --output=/scratch/%u/lfd_final/lstm/grid_search/slurm_logs/slurm-%A_%a.out
 #SBATCH --error=/scratch/%u/lfd_final/lstm/grid_search/slurm_logs/slurm-%A_%a.err
