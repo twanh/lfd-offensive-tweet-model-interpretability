@@ -27,6 +27,7 @@ BASE_OUTPUT_DIR="/scratch/$USER/lfd_final/lstm/grid_search/"
 RESULTS_DIR="$BASE_OUTPUT_DIR/results/"
 
 mkdir -p $BASE_OUTPUT_DIR
+mkdir -p $RESULTS_DIR
 
 echo "--- Starting Grid Search ---"
 
