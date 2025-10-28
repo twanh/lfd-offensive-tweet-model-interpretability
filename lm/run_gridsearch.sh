@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=bert_offensive_grid_search
 #SBATCH --output=/scratch/%u/lfd_final/grid_search/slurm_logs/slurm-%A_%a.out
-#SBATCH --output=/scratch/%u/lfd_final/grid_search/slurm_logs/slurm-%A_%a.err
+#SBATCH --error=/scratch/%u/lfd_final/grid_search/slurm_logs/slurm-%A_%a.err
 #SBATCH --partition=gpu
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=4
@@ -16,15 +16,18 @@ set -e
 # Print all commands to stdout
 set -x
 
+mkdir -p /scratch/$USER/lfd_final/grid_search/slurm_logs
+
 # Setup modules and python
 module load CUDA/11.7.0
 module load Boost/1.79.0-GCC-11.3.0
 source $HOME/venvs/lfd_final/bin/activate
 
 # Defaults
-TRAIN_FILE="train.tsv"
-DEV_FILE="dev.tsv"
-TEST_FILE="test.tsv"
+DATA_DIR="$HOME/workspace/lfd-offensive-tweet-model-interpretability/data/raw"
+TRAIN_FILE="$DATA_DIR/train.tsv"
+DEV_FILE="$DATA_DIR/dev.tsv"
+TEST_FILE="$DATA_DIR/test.tsv"
 MODEL="bert-base-uncased"
 EPOCHS="15"
 BASE_OUTPUT_DIR="/scratch/$USER/lfd_final/grid_search/"
