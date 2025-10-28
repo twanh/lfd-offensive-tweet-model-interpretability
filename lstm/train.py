@@ -340,16 +340,15 @@ def main():
         }
 
     # Save model and artifacts
-
     if args.save_model_dir and final_model is not None:
-        print(f'Saving model and artifacts to {args.model_dir}')
-        os.makedirs(args.model_dir, exist_ok=True)
-        final_model.save(os.path.join(args.model_dir, 'model.keras'))
-        with open(os.path.join(args.model_dir, 'word_to_idx.json'), 'w') as f:
+        print(f'Saving model and artifacts to {args.save_model_dir}')
+        os.makedirs(args.save_model_dir, exist_ok=True)
+        final_model.save(os.path.join(args.save_model_dir, 'model.keras'))
+        with open(os.path.join(args.save_model_dir, 'word_to_idx.json'), 'w') as f:
             json.dump(word_to_idx, f)
-        with open(os.path.join(args.model_dir, 'label_encoder.pkl'), 'wb') as f:
+        with open(os.path.join(args.save_model_dir, 'label_encoder.pkl'), 'wb') as f:
             pickle.dump(encoder, f)
-        with open(os.path.join(args.model_dir, 'training_params.json'), 'w') as f:
+        with open(os.path.join(args.save_model_dir, 'training_params.json'), 'w') as f:
             json.dump(params, f)
         print('Artifacts saved successfully.')
 
