@@ -80,10 +80,10 @@ echo "--- Training Log ---" >> $RESULTS_FILE
 
 # Add all stdout and stderr from the python script to results.txt
 python train.py \
+    "$MODEL" \
     $TRAIN_FILE \
     $DEV_FILE \
     --test-file $TEST_FILE \
-    --model-name "$MODEL" \
     --output-dir "$OUTPUT_DIR" \
     --num-train-epochs $EPOCHS \
     --learning-rate $LR \
@@ -94,7 +94,6 @@ python train.py \
     --load-best-model-at-end \
     --metric-for-best-model "eval_f1_macro" \
     --eval-strategy "epoch" \
-    --save-strategy "epoch" \
     --confusion-matrix "$OUTPUT_DIR/test_confusion_matrix.png" \
     >> $RESULTS_FILE 2>&1
 

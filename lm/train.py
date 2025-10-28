@@ -63,7 +63,7 @@ def create_arg_parser() -> argparse.Namespace:
     parser.add_argument('--weight-decay', type=float, default=0.01)
     parser.add_argument('--gradient-accumulation-steps', type=int, default=1)
     parser.add_argument(
-        '--eval_strategy',
+        '--eval-strategy',
         choices=['no', 'steps', 'epoch'], default='epoch',
     )
     parser.add_argument('--logging-steps', type=int, default=50)
