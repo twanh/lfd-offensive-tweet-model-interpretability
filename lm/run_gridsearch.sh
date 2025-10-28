@@ -83,19 +83,19 @@ python train.py \
     $TRAIN_FILE \
     $DEV_FILE \
     --test-file $TEST_FILE \
-    --model_name "$MODEL" \
-    --output_dir "$OUTPUT_DIR" \
-    --num_train_epochs $EPOCHS \
-    --learning_rate $LR \
-    --per_device_train_batch_size $BATCH_SIZE \
-    --per_device_eval_batch_size $BATCH_SIZE \
-    --max_length $MAX_LENGTH \
-    --early_stopping_patience $PATIENCE \
-    --load_best_model_at_end \
-    --metric_for_best_model "eval_f1_macro" \
-    --eval_strategy "epoch" \
-    --save_strategy "epoch" \
-    --confusion_matrix "$OUTPUT_DIR/test_confusion_matrix.png" \
+    --model-name "$MODEL" \
+    --output-dir "$OUTPUT_DIR" \
+    --num-train-epochs $EPOCHS \
+    --learning-rate $LR \
+    --per-device-train-batch-size $BATCH_SIZE \
+    --per-device-eval-batch-size $BATCH_SIZE \
+    --max-length $MAX_LENGTH \
+    --early-stopping-patience $PATIENCE \
+    --load-best-model-at-end \
+    --metric-for-best-model "eval_f1_macro" \
+    --eval-strategy "epoch" \
+    --save-strategy "epoch" \
+    --confusion-matrix "$OUTPUT_DIR/test_confusion_matrix.png" \
     >> $RESULTS_FILE 2>&1
 
 echo "Job finished. Results and model saved to $OUTPUT_DIR"
