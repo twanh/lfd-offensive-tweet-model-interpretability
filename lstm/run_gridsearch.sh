@@ -23,8 +23,8 @@ DATA_DIR="$HOME/workspace/lfd-offensive-tweet-model-interpretability/data/clean"
 TRAIN_FILE="$DATA_DIR/train.tsv"
 DEV_FILE="$DATA_DIR/dev.tsv"
 TEST_FILE="$DATA_DIR/test.tsv"
-BASE_OUTPUT_DIR="/scratch/$USER/lfd_final/lstm/grid_search/"
-RESULTS_DIR="$BASE_OUTPUT_DIR/results/"
+BASE_OUTPUT_DIR="/scratch/$USER/lfd_final/lstm/grid_search"
+RESULTS_DIR="$BASE_OUTPUT_DIR/results"
 
 mkdir -p $BASE_OUTPUT_DIR
 mkdir -p $RESULTS_DIR
@@ -35,7 +35,7 @@ python train.py \
     $TRAIN_FILE \
     $DEV_FILE \
     -t $TEST_FILE \
-    --embeddings " /scratch/$USER/fasttext/cc.en.300.bin"  \
+    --embeddings "/scratch/$USER/fasttext/cc.en.300.bin"  \
     --save-model-dir "$RESULTS_DIR/grid_search_best_model/" \
     --epochs 20 \
     --batch_size 32 \
