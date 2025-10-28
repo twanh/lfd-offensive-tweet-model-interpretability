@@ -16,6 +16,7 @@ from keras.layers import LSTM
 from keras.models import Sequential
 from sklearn.model_selection import ParameterGrid
 from sklearn.preprocessing import LabelBinarizer
+from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 MAX_LEN = 50  # Maximum sequence length for padding
@@ -254,9 +255,16 @@ def main():
     emb_matrix = get_emb_matrix(word_to_idx, ft_model)
 
     encoder = LabelBinarizer()
-    Y_train_bin = encoder.fit_transform(Y_train)
+    Y_train_encoded = encoder.fit_transform(Y_train)
     # Use transform, not fit_transform for dev
-    Y_dev_bin = encoder.transform(Y_dev)
+    Y_dev_encoded = encoder.transform(Y_dev)
+
+    Y_train_int = np.argmax(Y_train_encoded, axis=1) if len(Y_train_encoded.shape) > 1 and Y_train_encoded.shape[1] > 1 else Y_train_encoded.flatten()
+    Y_dev_int = np.argmax(Y_dev_encoded, axis=1) if len(Y_dev_encoded.shape) > 1 and Y_dev_encoded.shape[1] > 1 else Y_dev_encoded.flatten()
+            
+    num_classes = len(encoder.classes_)
+    Y_train_bin = to_categorical(Y_train_int, num_classes=num_classes)
+    Y_dev_bin = to_categorical(Y_dev_int, num_classes=num_classes)
 
     # Convert to padded sequences
     X_train_seq = pad_sequences(
