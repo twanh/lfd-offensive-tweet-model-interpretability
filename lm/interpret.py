@@ -82,7 +82,7 @@ def main() -> int:
     ).to('cuda')
     model.eval()
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model_path)
+    tokenizer = BertTokenizer.from_pretrained(args.model_path)
     explainer = Generator(model)
 
     classications = ['OFF', 'NOT']
@@ -107,6 +107,9 @@ def main() -> int:
         encoding = tokenizer(tweet, return_tensors='pt')
         input_ids = encoding['input_ids'].to('cuda')
         attention_mask = encoding['attention_mask'].to('cuda')
+
+        # Get the tokens
+        tokens = tokenizer.convert_ids_to_tokens(input_ids.flatten())
 
         # Get scores for OFF class
         expl_off = explainer.generate_LRP(
