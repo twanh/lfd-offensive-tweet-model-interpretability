@@ -82,7 +82,7 @@ def main() -> int:
     ).to('cuda')
     model.eval()
 
-    tokenizer = BertTokenizer.from_pretrained(args.model_path)
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     explainer = Generator(model)
 
     classications = ['OFF', 'NOT']
