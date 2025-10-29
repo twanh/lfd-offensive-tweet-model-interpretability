@@ -61,7 +61,7 @@ class Generator:
 
         self.model.relprop(
             torch.tensor(
-            one_hot_vector,
+                one_hot_vector,
             ).to(input_ids.device), **kwargs,
         )
 
@@ -102,7 +102,7 @@ class Generator:
 
         self.model.relprop(
             torch.tensor(
-            one_hot_vector,
+                one_hot_vector,
             ).to(input_ids.device), **kwargs,
         )
 
@@ -137,7 +137,7 @@ class Generator:
 
         cam = self.model.relprop(
             torch.tensor(
-            one_hot_vector,
+                one_hot_vector,
             ).to(input_ids.device), **kwargs,
         )
         cam = cam.sum(dim=2)
@@ -196,7 +196,7 @@ class Generator:
 
         self.model.relprop(
             torch.tensor(
-            one_hot_vector,
+                one_hot_vector,
             ).to(input_ids.device), **kwargs,
         )
 

@@ -146,7 +146,7 @@ class BertClassifier(nn.Module):
             input_tensors.append(torch.cat([cls_token, q, sep_token, d]))
             position_ids.append(
                 torch.tensor(
-                list(range(0, len(q) + 1)) + list(range(0, len(d) + 1)),
+                    list(range(0, len(q) + 1)) + list(range(0, len(d) + 1)),
                 ),
             )
         bert_input = PaddedSequence.autopad(

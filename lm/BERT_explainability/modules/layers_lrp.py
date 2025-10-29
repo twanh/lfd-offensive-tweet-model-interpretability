@@ -204,7 +204,11 @@ class BatchNorm2d(nn.BatchNorm2d, RelProp):
         X = self.X
         beta = 1 - alpha
         weight = self.weight.unsqueeze(0).unsqueeze(2).unsqueeze(3) / (
-            (self.running_var.unsqueeze(0).unsqueeze(2).unsqueeze(3).pow(2) + self.eps).pow(0.5)
+            (
+                self.running_var.unsqueeze(0).unsqueeze(
+                    2,
+                ).unsqueeze(3).pow(2) + self.eps
+            ).pow(0.5)
         )
         Z = X * weight + 1e-9
         S = R / Z
@@ -244,7 +248,8 @@ class Conv2d(nn.Conv2d, RelProp):
         Z = self.forward(self.X)
 
         output_padding = self.X.size()[2] - (
-            (Z.size()[2] - 1) * self.stride[0] - 2 * self.padding[0] + self.kernel_size[0]
+            (Z.size()[2] - 1) * self.stride[0] - 2 *
+            self.padding[0] + self.kernel_size[0]
         )
 
         return F.conv_transpose2d(DY, weight, stride=self.stride, padding=self.padding, output_padding=output_padding)
@@ -256,12 +261,18 @@ class Conv2d(nn.Conv2d, RelProp):
             X = self.X
             L = self.X * 0 + \
                 torch.min(
-                    torch.min(torch.min(self.X, dim=1, keepdim=True)[0], dim=2, keepdim=True)[0], dim=3,
+                    torch.min(
+                        torch.min(self.X, dim=1, keepdim=True)
+                        [0], dim=2, keepdim=True,
+                    )[0], dim=3,
                     keepdim=True,
                 )[0]
             H = self.X * 0 + \
                 torch.max(
-                    torch.max(torch.max(self.X, dim=1, keepdim=True)[0], dim=2, keepdim=True)[0], dim=3,
+                    torch.max(
+                        torch.max(self.X, dim=1, keepdim=True)
+                        [0], dim=2, keepdim=True,
+                    )[0], dim=3,
                     keepdim=True,
                 )[0]
             Za = torch.conv2d(X, self.weight, bias=None, stride=self.stride, padding=self.padding) - \
