@@ -470,9 +470,9 @@ def main() -> int:
     ).to('cuda')
     model.eval()
 
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+    tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
 
-    tweets, labels = read_corpus(args.input_file)
+    tweets, labels = read_corpus('bert-base-uncased')
 
     classications = ['NOT', 'OFF']
 
@@ -488,8 +488,8 @@ def main() -> int:
             truncation=True,
             max_length=512,
         )
-        input_ids = encoding['input_ids'].to(args.device)
-        attention_mask = encoding['attention_mask'].to(args.device)
+        input_ids = encoding['input_ids'].to('cuda')
+        attention_mask = encoding['attention_mask'].to('cuda')
 
         # Get prediction
         with torch.no_grad():
