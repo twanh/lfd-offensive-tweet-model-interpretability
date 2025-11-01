@@ -80,7 +80,10 @@ class BertWrapper(torch.nn.Module):
         attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Forward pass that returns logits for the target class."""
-        outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )
         return outputs.logits
 
 
@@ -289,7 +292,9 @@ def aggregate_statistics(
         for feat in result.get('steering_away', []):
             token = feat['token']
             steering_away_counts[token]['count'] += 1
-            steering_away_counts[token]['total_attr'] += abs(feat['attribution'])
+            steering_away_counts[token]['total_attr'] += abs(
+                feat['attribution'],
+            )
 
         # Aggregate combinations
         for combo in result.get('combinations', []):
@@ -299,7 +304,9 @@ def aggregate_statistics(
 
         # Aggregate context metrics
         if 'context' in result:
-            context_usage_ratios.append(result['context']['context_usage_ratio'])
+            context_usage_ratios.append(
+                result['context']['context_usage_ratio'],
+            )
             entropies.append(result['context']['entropy'])
 
     # Calculate averages
@@ -336,7 +343,9 @@ def aggregate_statistics(
     ]
     combinations_avg.sort(key=lambda x: x['avg_score'], reverse=True)
 
-    avg_context_usage = np.mean(context_usage_ratios) if context_usage_ratios else 0.0
+    avg_context_usage = np.mean(
+        context_usage_ratios,
+    ) if context_usage_ratios else 0.0
     avg_entropy = np.mean(entropies) if entropies else 0.0
 
     return {
@@ -364,7 +373,9 @@ def print_results(
     print('\nTop Contributing Features:')
     print('-' * 80)
     for i, feat in enumerate(result.get('top_features', [])[:10], 1):
-        print(f'{i:2d}. {feat["token"]:20s} | Attribution: {feat["attribution"]:10.6f}')
+        print(
+            f'{i:2d}. {feat["token"]:20s} | Attribution: {feat["attribution"]:10.6f}',
+        )
 
     # Context usage
     if 'context' in result:
@@ -374,7 +385,9 @@ def print_results(
         print(f'Total tokens: {ctx["total_tokens"]}')
         print(f'Significant tokens: {ctx["significant_tokens"]}')
         print(f'Context usage ratio: {ctx["context_usage_ratio"]:.2%}')
-        print(f'Concentration: {ctx["concentration"]} (entropy: {ctx["entropy"]:.3f})')
+        print(
+            f'Concentration: {ctx["concentration"]} (entropy: {ctx["entropy"]:.3f})',
+        )
 
     # Steering away features
     steering_away = result.get('steering_away', [])
@@ -382,7 +395,9 @@ def print_results(
         print('\nFeatures Steering Away from Classification:')
         print('-' * 80)
         for i, feat in enumerate(steering_away[:10], 1):
-            print(f'{i:2d}. {feat["token"]:20s} | Attribution: {feat["attribution"]:10.6f}')
+            print(
+                f'{i:2d}. {feat["token"]:20s} | Attribution: {feat["attribution"]:10.6f}',
+            )
 
     # Feature combinations
     combinations = result.get('combinations', [])
@@ -391,7 +406,9 @@ def print_results(
         print('-' * 80)
         for i, combo in enumerate(combinations[:10], 1):
             tokens_str = ' '.join(combo['tokens'])
-            print(f'{i:2d}. [{tokens_str}] | Combined Score: {combo["score"]:10.6f}')
+            print(
+                f'{i:2d}. [{tokens_str}] | Combined Score: {combo["score"]:10.6f}',
+            )
 
 
 def print_aggregated_results(
@@ -436,7 +453,9 @@ def print_aggregated_results(
     # Context usage
     print('\nOverall Context Usage:')
     print('-' * 80)
-    print(f'Average context usage ratio: {aggregated["avg_context_usage"]:.2%}')
+    print(
+        f'Average context usage ratio: {aggregated["avg_context_usage"]:.2%}',
+    )
     print(f'Average entropy: {aggregated["avg_entropy"]:.3f}')
 
 
@@ -451,7 +470,7 @@ def main() -> int:
     ).to('cuda')
     model.eval()
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model_path)
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 
     tweets, labels = read_corpus(args.input_file)
 
@@ -541,4 +560,3 @@ def main() -> int:
 
 if __name__ == '__main__':
     raise SystemExit(main())
-
