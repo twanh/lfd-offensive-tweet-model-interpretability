@@ -10,6 +10,7 @@ from torch.nn import CrossEntropyLoss
 from torch.nn import MSELoss
 from transformers import BertPreTrainedModel
 from transformers.utils import logging
+from transformers.modeling_outputs import SequenceClassifierOutput
 
 
 class BertForSequenceClassification(BertPreTrainedModel):
