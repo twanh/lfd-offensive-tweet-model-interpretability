@@ -142,6 +142,7 @@ def main() -> int:
         best_acc = 0.0
         best_params = {'C': None, 'kernel': None, 'gamma': None}
         best_model = None
+        best_y_dev_pred = None
 
         print('Performing Grid Search')
         for C, kernel, gamma in product(  # type: ignore
@@ -166,9 +167,14 @@ def main() -> int:
                 best_params['kernel'] = kernel
                 best_params['gamma'] = gamma
                 best_model = model
+                best_y_dev_pred = y_dev_pred
 
         print(f'Best Dev Accuracy: {best_acc:.4f}')
         print(f'Best Parameters: {best_params}')
+        print('Dev Classification Report:')
+        print(classification_report(y_dev, best_y_dev_pred))
+        print('Dev Confusion Matrix:')
+        print(confusion_matrix(y_dev, best_y_dev_pred))
 
         fin_model = best_model
 
@@ -188,6 +194,10 @@ def main() -> int:
         acc = accuracy_score(y_dev, y_dev_pred)
 
         print(f'Dev Accuracy: {acc:.4f}')
+        print('Dev Classification Report:')
+        print(classification_report(y_dev, y_dev_pred))
+        print('Dev Confusion Matrix:')
+        print(confusion_matrix(y_dev, y_dev_pred))
 
         # Final model
         fin_model = model
