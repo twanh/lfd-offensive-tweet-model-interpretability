@@ -385,27 +385,28 @@ def main():
         print('--- Evaluating on Test Set ---')
         X_test, Y_test = read_corpus(args.test_file)
         X_test_tokens = spacy_tokenizer(nlp, X_test)
-        
+
         # Use transform for test labels (don't refit encoder)
         Y_test_encoded = encoder.transform(Y_test)
         Y_test_int = np.argmax(Y_test_encoded, axis=1) if len(
             Y_test_encoded.shape,
         ) > 1 and Y_test_encoded.shape[1] > 1 else Y_test_encoded.flatten()
         Y_test_bin = to_categorical(Y_test_int, num_classes=num_classes)
-        
+
         # Convert to padded sequences
         X_test_seq = pad_sequences(
-            texts_to_sequences(
-                X_test_tokens, word_to_idx,
-            ), maxlen=MAX_LEN,
+            texts_to_sequences(X_test_tokens, word_to_idx),
+            maxlen=MAX_LEN,
         )
-        
+
         # Evaluate on test set
-        test_loss, test_acc = final_model.evaluate(X_test_seq, Y_test_bin, verbose=0)
+        test_loss, test_acc = final_model.evaluate(
+            X_test_seq, Y_test_bin, verbose=0,
+        )
         Y_test_pred = final_model.predict(X_test_seq, verbose=0)
         Y_test_pred_label = np.argmax(Y_test_pred, axis=1)
         Y_test_true_label = np.argmax(Y_test_bin, axis=1)
-        
+
         test_report = classification_report(
             Y_test_true_label,
             Y_test_pred_label,
@@ -415,7 +416,6 @@ def main():
         print(f'[TEST] Accuracy: {test_acc:.4f}')
         print('[TEST] Classification Report:\n' + test_report)
 
-    
 
 if __name__ == '__main__':
     main()
