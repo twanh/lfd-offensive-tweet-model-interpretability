@@ -1,5 +1,6 @@
 import argparse
 import pickle
+from collections import Counter
 from typing import TypedDict
 
 import numpy as np
@@ -213,7 +214,7 @@ def aggregate_subwords_to_words(
 
     for i in sorted(word_importances.keys()):
         words.append(word_tokens[i])
-        importances.append(np.mean(word_importances[i]))
+        importances.append(np.sum(word_importances[i]))
 
     return words, np.array(importances)
 
@@ -243,6 +244,11 @@ def extract_top_k_words(
     return word_importances, [word for word, _ in sorted_words[:k]]
 
 
+def create_label_to_class_mapping(labels: list[str]) -> dict[str, int]:
+    unique_labels = sorted(set(labels))
+    return {label: idx for idx, label in enumerate(unique_labels)}
+
+
 def main() -> int:
 
     args = create_arg_parser()
@@ -258,6 +264,8 @@ def main() -> int:
     per_sample_importances = []
     top_k_words = []
 
+    label_to_class = create_label_to_class_mapping(labels)
+
     for tweet, label in tqdm(
         zip(tweets, labels),
         total=len(tweets),
@@ -271,7 +279,7 @@ def main() -> int:
                 model,
                 tokenizer,
                 args.device,
-                label,
+                label_to_class[label],
             )
 
             # Aggregate the subwords to the words
@@ -314,6 +322,15 @@ def main() -> int:
                 f'  - {word:<20} | Importance: {per_sample_importances[i][word]:.4f}',  # noqa: E501
             )
         print('-' * 80)
+
+    token_frequencies = Counter()
+    for top_k in top_k_words:
+        token_frequencies.update(top_k)
+
+    # Print the top k words sorted by importance
+    print(f'Top {args.k} words for the full dataset sorted by importance:')
+    for word, frequency in token_frequencies.most_common(args.k):
+        print(f'  - {word:<20} | Frequency: {frequency}')
 
     with open(args.output_file, 'wb') as f:
         pickle.dump(results, f)
