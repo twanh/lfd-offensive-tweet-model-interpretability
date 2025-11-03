@@ -123,35 +123,43 @@ def compute_attributions(
     # Convert to tensor
     input_tensor = tf.constant([token_ids_padded], dtype=tf.int32)
 
-    with tf.GradientTape() as tape:
-        tape.watch(input_tensor)
+    # Get embedding layer
+    embedding_layer = model.layers[0]
 
-        # Get embedding layer output
-        embedding_layer = model.layers[0]  # First layer is Embedding
+    with tf.GradientTape() as tape:
+        # Get embeddings (float)
         embeddings = embedding_layer(input_tensor)
 
-        # Get model output
-        logits = model(input_tensor)
+        # Watch the float embeddings
+        tape.watch(embeddings)
 
-    # Compute gradients w.r.t. embeddings
-    gradients = tape.gradient(logits[:, target_class], embeddings)
+        # Forward through rest of model
+        x = embeddings
+        for layer in model.layers[1:]:
+            x = layer(x)
+
+        logits = x
+        # Get prediction for target class
+        prediction = logits[0, target_class]
+
+        # Compute gradients w.r.t. embeddings
+    gradients = tape.gradient(prediction, embeddings)
 
     if gradients is None:
-        # Return zeros if gradient computation fails
         return {
             'tokens': tokens,
             'importances': np.zeros(len(tokens)),
         }
 
-    # Importance = |input × gradient| summed across embedding dimension
+    # Importance = |embeddings × gradient|, summed across embedding dim
     importances = (
         tf.abs(embeddings * gradients)
         .numpy()
-        .sum(axis=2)  # Sum across embedding dimensions
+        .sum(axis=2)  # Sum across embedding dimension
         .squeeze()
     )
 
-    # Only keep importances for actual tokens (not padding)
+    # Only keep importances for actual tokens
     importances = importances[:len(tokens)]
 
     return {
