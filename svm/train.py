@@ -1,4 +1,5 @@
 import argparse
+import os
 import pickle
 import warnings
 from functools import partial
@@ -197,9 +198,15 @@ def main() -> int:
             pickle.dump(fin_model, save_model_file)
         print(f'Saved model to {args.save_model}')
 
-        with open(f'vectorizer_{args.save_model}', 'wb') as f:
+        model_dir = os.path.dirname(args.save_model)
+        model_base = os.path.basename(args.save_model)
+        vectorizer_filename = os.path.join(
+            model_dir, f'{model_base}_vectorizer',
+        )
+
+        with open(vectorizer_filename, 'wb') as f:
             pickle.dump(vectorizer, f)
-        print(f'Saved vectorizer to vectorizer_{args.save_model}')
+        print(f'Saved vectorizer to {vectorizer_filename}')
 
     # Run on test set if provided
     if args.test_file is not None:
