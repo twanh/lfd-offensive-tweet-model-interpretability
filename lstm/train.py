@@ -395,7 +395,7 @@ def main():
                 text, label = parts[0], parts[-1]
                 X_test.append(text)
                 Y_test.append(label)
-        X_test_tok = [tokenizer(text) for text in X_test]
+        X_test_tok = [spacy_tokenizer(text) for text in X_test]
         X_test_idx = [
             [word_to_idx.get(tok.text.lower(), 1) for tok in doc]
             for doc in X_test_tok
