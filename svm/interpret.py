@@ -2,7 +2,7 @@ import argparse
 import pickle
 
 import numpy as np
-import tqdm
+from tqdm import tqdm
 from train import spacy_tokenizer  # noqa: F401
 
 
