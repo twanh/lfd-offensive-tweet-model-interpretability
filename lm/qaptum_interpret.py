@@ -76,12 +76,15 @@ class BertWrapper(torch.nn.Module):
 
     def forward(
         self,
-        input_ids: torch.Tensor,
+        inputs_embeds: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Forward pass that returns logits for the target class."""
+        # Explicitly set input_ids to None when using inputs_embeds
+        # to prevent the model from trying to use input_ids
         outputs = self.model(
-            input_ids=input_ids,
+            input_ids=None,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
         return outputs.logits
@@ -98,16 +101,29 @@ def compute_attributions(
     wrapped_model = BertWrapper(model).to('cuda')
     wrapped_model.eval()
 
-    # Create baseline (all zeros/padding tokens)
-    baseline_ids = torch.zeros_like(input_ids).to('cuda')
+    # Get embeddings layer and ensure it's on the correct device
+    embeddings = model.get_input_embeddings()
+    embeddings = embeddings.to('cuda')
+    
+    # Ensure input_ids are on the correct device and are Long type
+    input_ids = input_ids.to('cuda')
+    if input_ids.dtype != torch.long:
+        input_ids = input_ids.long()
+    
+    # Compute input embeddings from token IDs
+    input_embeds = embeddings(input_ids)
+    
+    # Create baseline embeddings (all zeros)
+    baseline_embeds = torch.zeros_like(input_embeds).to('cuda')
 
     # Initialize IntegratedGradients
     ig = IntegratedGradients(wrapped_model)
 
-    # Compute attributions
+    # Compute attributions on embeddings (not token IDs)
+    # This avoids the issue of interpolating integer token IDs
     attributions = ig.attribute(
-        input_ids,
-        baselines=baseline_ids,
+        input_embeds,
+        baselines=baseline_embeds,
         target=target_class,
         additional_forward_args=(attention_mask,),
         n_steps=50,
@@ -267,94 +283,286 @@ def analyze_feature_combinations(
     return combination_scores[:n]
 
 
+def extract_attention_matrices(
+    attention_matrices: tuple[torch.Tensor, ...],
+    attention_mask: torch.Tensor,
+) -> dict[str, Any]:
+    """Extract and analyze attention matrices from all layers.
+    
+    Args:
+        attention_matrices: Tuple of attention tensors, one per layer
+            Shape: (batch_size, num_heads, seq_length, seq_length) for each layer
+        attention_mask: Attention mask tensor
+    
+    Returns:
+        Dictionary containing attention analysis
+    """
+    attention = attention_mask.squeeze(0).cpu().numpy()
+    valid_indices = attention == 1
+    seq_length = valid_indices.sum()
+    
+    # Stack all attention matrices: (num_layers, num_heads, seq_length, seq_length)
+    all_attentions = torch.stack([
+        attn.squeeze(0)  # Remove batch dimension: (num_heads, seq_length, seq_length)
+        for attn in attention_matrices
+    ])
+    
+    # Get device from attention matrices
+    device = all_attentions.device
+    
+    # Convert valid_indices to tensor for indexing (on same device)
+    valid_indices_tensor = torch.tensor(valid_indices, dtype=torch.long, device=device)
+    
+    # Average across heads for each layer: (num_layers, seq_length, seq_length)
+    layer_avg_attentions = all_attentions.mean(dim=1)
+    
+    # Extract valid positions from averaged attentions
+    # First index rows, then columns
+    layer_avg_valid = layer_avg_attentions[:, valid_indices_tensor, :][:, :, valid_indices_tensor]
+    
+    # Get maximum attention per token position (which tokens receive most attention)
+    max_attention_per_token = layer_avg_valid.max(dim=2).values  # (num_layers, seq_length)
+    
+    # Get maximum attention per layer (which tokens attend most)
+    max_attention_per_position = layer_avg_valid.max(dim=1).values  # (num_layers, seq_length)
+    
+    # Calculate attention entropy (measure of concentration)
+    # Higher entropy = more uniform attention, lower entropy = more focused
+    attention_entropies = []
+    for layer_idx in range(layer_avg_valid.shape[0]):
+        layer_attn = layer_avg_valid[layer_idx].cpu().numpy()
+        # Normalize to probabilities
+        layer_attn = layer_attn + 1e-10  # Avoid log(0)
+        layer_attn = layer_attn / layer_attn.sum(axis=1, keepdims=True)
+        # Calculate entropy for each token
+        entropies = -np.sum(layer_attn * np.log(layer_attn), axis=1)
+        attention_entropies.append(float(entropies.mean()))
+    
+    return {
+        'all_layers': {
+            'shape': list(all_attentions.shape),
+            'num_layers': len(attention_matrices),
+            'num_heads': all_attentions.shape[1],
+            'seq_length': seq_length,
+        },
+        'layer_averaged_attentions': layer_avg_valid.cpu().detach().numpy().tolist(),
+        'max_attention_per_token': max_attention_per_token.cpu().detach().numpy().tolist(),
+        'max_attention_per_position': max_attention_per_position.cpu().detach().numpy().tolist(),
+        'attention_entropies': attention_entropies,
+        'raw_attentions': [
+            {
+                'layer': i,
+                'shape': list(attn.shape),
+                'data': attn.cpu().detach().numpy().tolist(),
+            }
+            for i, attn in enumerate(attention_matrices)
+        ],
+    }
+
+
+def analyze_attention_patterns(
+    attention_matrices: tuple[torch.Tensor, ...],
+    tokens: list[str],
+    attention_mask: torch.Tensor,
+    target_class: int,
+    n: int = 10,
+) -> dict[str, Any]:
+    """Analyze attention patterns with attribution scores.
+    
+    This combines attention matrices with attribution scores to identify
+    which attention patterns are most important for the prediction.
+    """
+    attention = attention_mask.squeeze(0).cpu().numpy()
+    valid_indices = attention == 1
+    valid_tokens = [tokens[i] for i in range(len(tokens)) if valid_indices[i]]
+    
+    # Stack attention matrices: (num_layers, num_heads, seq_length, seq_length)
+    all_attentions = torch.stack([attn.squeeze(0) for attn in attention_matrices])
+    
+    # Get device from attention matrices
+    device = all_attentions.device
+    
+    # Convert valid_indices to tensor for indexing (on same device)
+    valid_indices_tensor = torch.tensor(valid_indices, dtype=torch.long, device=device)
+    
+    # Average across heads: (num_layers, seq_length, seq_length)
+    layer_avg_attentions = all_attentions.mean(dim=1)
+    
+    # Extract valid positions
+    layer_avg_valid = layer_avg_attentions[:, valid_indices_tensor, :][:, :, valid_indices_tensor]
+    
+    # Get attention scores for each token pair
+    # Sum across layers to get overall attention strength
+    total_attention = layer_avg_valid.sum(dim=0)  # (seq_length, seq_length)
+    
+    # Get tokens that receive most attention (columns)
+    attention_received = total_attention.sum(dim=0)  # (seq_length,)
+    # Convert to CPU numpy array before using np.argsort
+    attention_received_np = attention_received.cpu().detach().numpy()
+    top_attended_tokens = [
+        {
+            'token': valid_tokens[idx],
+            'attention_score': float(attention_received[idx]),
+            'index': int(idx),
+        }
+        for idx in np.argsort(attention_received_np)[::-1][:n]
+    ]
+    
+    # Get tokens that pay most attention (rows)
+    attention_paid = total_attention.sum(dim=1)  # (seq_length,)
+    # Convert to CPU numpy array before using np.argsort
+    attention_paid_np = attention_paid.cpu().detach().numpy()
+    top_attending_tokens = [
+        {
+            'token': valid_tokens[idx],
+            'attention_score': float(attention_paid[idx]),
+            'index': int(idx),
+        }
+        for idx in np.argsort(attention_paid_np)[::-1][:n]
+    ]
+    
+    # Get strongest attention pairs
+    attention_pairs = []
+    for i in range(len(valid_tokens)):
+        for j in range(len(valid_tokens)):
+            if i != j:
+                attention_pairs.append({
+                    'token_from': valid_tokens[i],
+                    'token_to': valid_tokens[j],
+                    'attention_score': float(total_attention[i, j]),
+                    'index_from': int(i),
+                    'index_to': int(j),
+                })
+    
+    attention_pairs.sort(key=lambda x: x['attention_score'], reverse=True)
+    
+    return {
+        'top_attended_tokens': top_attended_tokens,
+        'top_attending_tokens': top_attending_tokens,
+        'strongest_attention_pairs': attention_pairs[:n],
+    }
+
+
 def aggregate_statistics(
     all_results: list[dict[str, Any]],
     min_count: int = 10,
+    group_by_label: bool = True,
 ) -> dict[str, Any]:
-    """Aggregate statistics across all tweets."""
+    """Aggregate statistics across all tweets.
+    
+    Args:
+        all_results: List of result dictionaries
+        min_count: Minimum count for a feature to be considered
+        group_by_label: If True, aggregate separately for each label
+    """
 
-    # Aggregate top features
-    feature_counts = defaultdict(lambda: {'count': 0, 'total_attr': 0.0})
-    steering_away_counts = defaultdict(lambda: {'count': 0, 'total_attr': 0.0})
-    combination_counts = defaultdict(lambda: {'count': 0, 'total_score': 0.0})
+    def aggregate_for_label(label_results: list[dict[str, Any]]) -> dict[str, Any]:
+        """Helper function to aggregate statistics for a single label."""
+        feature_counts = defaultdict(lambda: {'count': 0, 'total_attr': 0.0})
+        steering_away_counts = defaultdict(lambda: {'count': 0, 'total_attr': 0.0})
+        combination_counts = defaultdict(lambda: {'count': 0, 'total_score': 0.0})
 
-    context_usage_ratios = []
-    entropies = []
+        context_usage_ratios = []
+        entropies = []
 
-    for result in all_results:
-        # Aggregate top features
-        for feat in result.get('top_features', []):
-            token = feat['token']
-            feature_counts[token]['count'] += 1
-            feature_counts[token]['total_attr'] += feat['attribution']
+        for result in label_results:
+            # Aggregate top features
+            for feat in result.get('top_features', []):
+                token = feat['token']
+                feature_counts[token]['count'] += 1
+                feature_counts[token]['total_attr'] += feat['attribution']
 
-        # Aggregate steering away features
-        for feat in result.get('steering_away', []):
-            token = feat['token']
-            steering_away_counts[token]['count'] += 1
-            steering_away_counts[token]['total_attr'] += abs(
-                feat['attribution'],
-            )
+            # Aggregate steering away features
+            for feat in result.get('steering_away', []):
+                token = feat['token']
+                steering_away_counts[token]['count'] += 1
+                steering_away_counts[token]['total_attr'] += abs(
+                    feat['attribution'],
+                )
 
-        # Aggregate combinations
-        for combo in result.get('combinations', []):
-            combo_key = ' '.join(combo['tokens'])
-            combination_counts[combo_key]['count'] += 1
-            combination_counts[combo_key]['total_score'] += combo['score']
+            # Aggregate combinations
+            for combo in result.get('combinations', []):
+                combo_key = ' '.join(combo['tokens'])
+                combination_counts[combo_key]['count'] += 1
+                combination_counts[combo_key]['total_score'] += combo['score']
 
-        # Aggregate context metrics
-        if 'context' in result:
-            context_usage_ratios.append(
-                result['context']['context_usage_ratio'],
-            )
-            entropies.append(result['context']['entropy'])
+            # Aggregate context metrics
+            if 'context' in result:
+                context_usage_ratios.append(
+                    result['context']['context_usage_ratio'],
+                )
+                entropies.append(result['context']['entropy'])
 
-    # Calculate averages
-    top_features_avg = [
-        {
-            'token': token,
-            'avg_attribution': data['total_attr'] / data['count'],
-            'count': data['count'],
+        # Calculate averages
+        top_features_avg = [
+            {
+                'token': token,
+                'avg_attribution': data['total_attr'] / data['count'],
+                'count': data['count'],
+            }
+            for token, data in feature_counts.items()
+            if data['count'] >= min_count
+        ]
+        top_features_avg.sort(key=lambda x: x['avg_attribution'], reverse=True)
+
+        steering_away_avg = [
+            {
+                'token': token,
+                'avg_attribution': data['total_attr'] / data['count'],
+                'count': data['count'],
+            }
+            for token, data in steering_away_counts.items()
+            if data['count'] >= min_count
+        ]
+        steering_away_avg.sort(key=lambda x: x['avg_attribution'], reverse=True)
+
+        combinations_avg = [
+            {
+                'tokens': key,
+                'avg_score': data['total_score'] / data['count'],
+                'count': data['count'],
+            }
+            for key, data in combination_counts.items()
+            if data['count'] >= min_count
+        ]
+        combinations_avg.sort(key=lambda x: x['avg_score'], reverse=True)
+
+        avg_context_usage = np.mean(
+            context_usage_ratios,
+        ) if context_usage_ratios else 0.0
+        avg_entropy = np.mean(entropies) if entropies else 0.0
+
+        return {
+            'top_features': top_features_avg,
+            'steering_away_features': steering_away_avg,
+            'combinations': combinations_avg,
+            'avg_context_usage': float(avg_context_usage),
+            'avg_entropy': float(avg_entropy),
+            'num_samples': len(label_results),
         }
-        for token, data in feature_counts.items()
-        if data['count'] >= min_count
-    ]
-    top_features_avg.sort(key=lambda x: x['avg_attribution'], reverse=True)
 
-    steering_away_avg = [
-        {
-            'token': token,
-            'avg_attribution': data['total_attr'] / data['count'],
-            'count': data['count'],
+    if group_by_label:
+        # Group results by true_label
+        results_by_label = defaultdict(list)
+        for result in all_results:
+            label = result.get('true_label', 'UNKNOWN')
+            results_by_label[label].append(result)
+
+        # Aggregate for each label
+        aggregated_by_label = {}
+        for label, label_results in results_by_label.items():
+            aggregated_by_label[label] = aggregate_for_label(label_results)
+
+        # Also compute overall statistics
+        overall = aggregate_for_label(all_results)
+
+        return {
+            'by_label': aggregated_by_label,
+            'overall': overall,
         }
-        for token, data in steering_away_counts.items()
-        if data['count'] >= min_count
-    ]
-    steering_away_avg.sort(key=lambda x: x['avg_attribution'], reverse=True)
-
-    combinations_avg = [
-        {
-            'tokens': key,
-            'avg_score': data['total_score'] / data['count'],
-            'count': data['count'],
-        }
-        for key, data in combination_counts.items()
-        if data['count'] >= min_count
-    ]
-    combinations_avg.sort(key=lambda x: x['avg_score'], reverse=True)
-
-    avg_context_usage = np.mean(
-        context_usage_ratios,
-    ) if context_usage_ratios else 0.0
-    avg_entropy = np.mean(entropies) if entropies else 0.0
-
-    return {
-        'top_features': top_features_avg,
-        'steering_away_features': steering_away_avg,
-        'combinations': combinations_avg,
-        'avg_context_usage': float(avg_context_usage),
-        'avg_entropy': float(avg_entropy),
-    }
+    else:
+        # Original behavior: aggregate all together
+        return aggregate_for_label(all_results)
 
 
 def print_results(
@@ -409,6 +617,53 @@ def print_results(
             print(
                 f'{i:2d}. [{tokens_str}] | Combined Score: {combo["score"]:10.6f}',
             )
+    
+    # Attention patterns
+    attention_patterns = result.get('attention_patterns', {})
+    if attention_patterns:
+        print('\nAttention Pattern Analysis:')
+        print('-' * 80)
+        
+        top_attended = attention_patterns.get('top_attended_tokens', [])
+        if top_attended:
+            print('\nTokens Receiving Most Attention:')
+            for i, tok in enumerate(top_attended[:10], 1):
+                print(
+                    f'{i:2d}. {tok["token"]:20s} | Attention Score: {tok["attention_score"]:10.6f}',
+                )
+        
+        top_attending = attention_patterns.get('top_attending_tokens', [])
+        if top_attending:
+            print('\nTokens Paying Most Attention:')
+            for i, tok in enumerate(top_attending[:10], 1):
+                print(
+                    f'{i:2d}. {tok["token"]:20s} | Attention Score: {tok["attention_score"]:10.6f}',
+                )
+        
+        attention_pairs = attention_patterns.get('strongest_attention_pairs', [])
+        if attention_pairs:
+            print('\nStrongest Attention Pairs:')
+            for i, pair in enumerate(attention_pairs[:10], 1):
+                print(
+                    f'{i:2d}. {pair["token_from"]:15s} -> {pair["token_to"]:15s} | '
+                    f'Score: {pair["attention_score"]:10.6f}',
+                )
+    
+    # Attention matrix statistics
+    attention_matrices = result.get('attention_matrices', {})
+    if attention_matrices:
+        attn_info = attention_matrices.get('all_layers', {})
+        if attn_info:
+            print('\nAttention Matrix Statistics:')
+            print('-' * 80)
+            print(f'Number of layers: {attn_info.get("num_layers", "N/A")}')
+            print(f'Number of heads per layer: {attn_info.get("num_heads", "N/A")}')
+            print(f'Sequence length: {attn_info.get("seq_length", "N/A")}')
+            
+            entropies = attention_matrices.get('attention_entropies', [])
+            if entropies:
+                print(f'Average attention entropy: {np.mean(entropies):.4f}')
+                print(f'Attention entropy range: [{min(entropies):.4f}, {max(entropies):.4f}]')
 
 
 def print_aggregated_results(
@@ -417,46 +672,114 @@ def print_aggregated_results(
 ) -> None:
     """Print aggregated statistics across all tweets."""
 
-    print('\n' + '=' * 80)
-    print('Aggregated Statistics Across All Tweets')
-    print('=' * 80)
+    # Check if results are grouped by label
+    if 'by_label' in aggregated:
+        # Print results per label
+        for label, label_stats in sorted(aggregated['by_label'].items()):
+            print('\n' + '=' * 80)
+            print(f'Aggregated Statistics for Label: {label}')
+            print(f'Number of samples: {label_stats["num_samples"]}')
+            print('=' * 80)
 
-    # Top features
-    print('\nMost Frequently Contributing Features:')
-    print('-' * 80)
-    for i, feat in enumerate(aggregated['top_features'][:n], 1):
-        print(
-            f'{i:2d}. {feat["token"]:20s} | Avg Attribution: {feat["avg_attribution"]:10.6f} | '
-            f'Count: {feat["count"]}',
-        )
+            # Top features
+            print('\nMost Frequently Contributing Features:')
+            print('-' * 80)
+            for i, feat in enumerate(label_stats['top_features'][:n], 1):
+                print(
+                    f'{i:2d}. {feat["token"]:20s} | Avg Attribution: {feat["avg_attribution"]:10.6f} | '
+                    f'Count: {feat["count"]}',
+                )
 
-    # Steering away features
-    if aggregated['steering_away_features']:
-        print('\nMost Frequently Steering Away Features:')
+            # Steering away features
+            if label_stats['steering_away_features']:
+                print('\nMost Frequently Steering Away Features:')
+                print('-' * 80)
+                for i, feat in enumerate(label_stats['steering_away_features'][:n], 1):
+                    print(
+                        f'{i:2d}. {feat["token"]:20s} | Avg Attribution: {feat["avg_attribution"]:10.6f} | '
+                        f'Count: {feat["count"]}',
+                    )
+
+            # Combinations
+            if label_stats['combinations']:
+                print('\nMost Effective Feature Combinations:')
+                print('-' * 80)
+                for i, combo in enumerate(label_stats['combinations'][:n], 1):
+                    print(
+                        f'{i:2d}. [{combo["tokens"]}] | Avg Score: {combo["avg_score"]:10.6f} | '
+                        f'Count: {combo["count"]}',
+                    )
+
+            # Context usage
+            print('\nContext Usage:')
+            print('-' * 80)
+            print(
+                f'Average context usage ratio: {label_stats["avg_context_usage"]:.2%}',
+            )
+            print(f'Average entropy: {label_stats["avg_entropy"]:.3f}')
+
+        # Print overall statistics
+        print('\n' + '=' * 80)
+        print('Overall Statistics (All Labels Combined)')
+        print('=' * 80)
+        overall = aggregated['overall']
+        
+        print('\nMost Frequently Contributing Features (Overall):')
         print('-' * 80)
-        for i, feat in enumerate(aggregated['steering_away_features'][:n], 1):
+        for i, feat in enumerate(overall['top_features'][:n], 1):
             print(
                 f'{i:2d}. {feat["token"]:20s} | Avg Attribution: {feat["avg_attribution"]:10.6f} | '
                 f'Count: {feat["count"]}',
             )
 
-    # Combinations
-    if aggregated['combinations']:
-        print('\nMost Effective Feature Combinations:')
+        print('\nOverall Context Usage:')
         print('-' * 80)
-        for i, combo in enumerate(aggregated['combinations'][:n], 1):
+        print(
+            f'Average context usage ratio: {overall["avg_context_usage"]:.2%}',
+        )
+        print(f'Average entropy: {overall["avg_entropy"]:.3f}')
+    else:
+        # Original behavior: print aggregated results
+        print('\n' + '=' * 80)
+        print('Aggregated Statistics Across All Tweets')
+        print('=' * 80)
+
+        # Top features
+        print('\nMost Frequently Contributing Features:')
+        print('-' * 80)
+        for i, feat in enumerate(aggregated['top_features'][:n], 1):
             print(
-                f'{i:2d}. [{combo["tokens"]}] | Avg Score: {combo["avg_score"]:10.6f} | '
-                f'Count: {combo["count"]}',
+                f'{i:2d}. {feat["token"]:20s} | Avg Attribution: {feat["avg_attribution"]:10.6f} | '
+                f'Count: {feat["count"]}',
             )
 
-    # Context usage
-    print('\nOverall Context Usage:')
-    print('-' * 80)
-    print(
-        f'Average context usage ratio: {aggregated["avg_context_usage"]:.2%}',
-    )
-    print(f'Average entropy: {aggregated["avg_entropy"]:.3f}')
+        # Steering away features
+        if aggregated['steering_away_features']:
+            print('\nMost Frequently Steering Away Features:')
+            print('-' * 80)
+            for i, feat in enumerate(aggregated['steering_away_features'][:n], 1):
+                print(
+                    f'{i:2d}. {feat["token"]:20s} | Avg Attribution: {feat["avg_attribution"]:10.6f} | '
+                    f'Count: {feat["count"]}',
+                )
+
+        # Combinations
+        if aggregated['combinations']:
+            print('\nMost Effective Feature Combinations:')
+            print('-' * 80)
+            for i, combo in enumerate(aggregated['combinations'][:n], 1):
+                print(
+                    f'{i:2d}. [{combo["tokens"]}] | Avg Score: {combo["avg_score"]:10.6f} | '
+                    f'Count: {combo["count"]}',
+                )
+
+        # Context usage
+        print('\nOverall Context Usage:')
+        print('-' * 80)
+        print(
+            f'Average context usage ratio: {aggregated["avg_context_usage"]:.2%}',
+        )
+        print(f'Average entropy: {aggregated["avg_entropy"]:.3f}')
 
 
 def main() -> int:
@@ -467,12 +790,13 @@ def main() -> int:
     # Load model and tokenizer
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_path,
+        output_attentions=True,
     ).to('cuda')
     model.eval()
 
     tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
 
-    tweets, labels = read_corpus('bert-base-uncased')
+    tweets, labels = read_corpus(args.input_file)
 
     classications = ['NOT', 'OFF']
 
@@ -491,12 +815,15 @@ def main() -> int:
         input_ids = encoding['input_ids'].to('cuda')
         attention_mask = encoding['attention_mask'].to('cuda')
 
-        # Get prediction
+        # Get prediction and attention matrices
         with torch.no_grad():
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
             logits = outputs.logits
             predicted_class_idx = logits.argmax(dim=1).item()
             predicted_class = classications[predicted_class_idx]
+            # Extract attention matrices: tuple of tensors, one per layer
+            # Shape: (batch_size, num_heads, seq_length, seq_length) for each layer
+            attention_matrices = outputs.attentions
 
         # Compute attributions for the predicted class
         attributions, _ = compute_attributions(
@@ -537,6 +864,21 @@ def main() -> int:
             window_size=3,
         )
 
+        # Extract and analyze attention matrices
+        attention_analysis = extract_attention_matrices(
+            attention_matrices,
+            attention_mask,
+        )
+        
+        # Analyze attention patterns
+        attention_patterns = analyze_attention_patterns(
+            attention_matrices,
+            tokens,
+            attention_mask,
+            predicted_class_idx,
+            n=args.n,
+        )
+
         result = {
             'tweet': tweet,
             'predicted_class': predicted_class,
@@ -545,6 +887,8 @@ def main() -> int:
             'context': context_analysis,
             'steering_away': steering_away,
             'combinations': combinations,
+            'attention_matrices': attention_analysis,
+            'attention_patterns': attention_patterns,
         }
 
         all_results.append(result)
