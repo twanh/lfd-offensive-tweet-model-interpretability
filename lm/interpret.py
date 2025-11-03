@@ -156,7 +156,7 @@ def compute_attributions(
 
     ig = IntegratedGradients(model)
     attributions = ig.attribute(
-        input_ids=input_ids,
+        inputs=input_ids,
         baselines=None,
         target=target_class,
         additional_forward_args=(attention_mask, token_type_ids),
@@ -266,6 +266,7 @@ def main() -> int:
 
     label_to_class = create_label_to_class_mapping(labels)
 
+
     print(f'DEBUG: Label to class mapping: {label_to_class}')
     print(f'DEBUG: Unique labels in data: {set(labels)}')
 
@@ -276,6 +277,8 @@ def main() -> int:
     ):
 
         print(f'DEBUG: {label=}, {label_to_class[label]=}')
+
+
 
         try:
             # Compute the attribution
@@ -288,12 +291,8 @@ def main() -> int:
             )
 
             print(f'DEBUG: tokens={attributions["tokens"]}')
-            print(
-                f'DEBUG: token_importances shape={attributions["token_importances"].shape}',
-            )
-            print(
-                f'DEBUG: token_importances={attributions["token_importances"][:10]}',
-            )
+            print(f'DEBUG: token_importances shape={attributions["token_importances"].shape}')
+            print(f'DEBUG: token_importances={attributions["token_importances"][:10]}')
 
             # Aggregate the subwords to the words
             words, importances = aggregate_subwords_to_words(
