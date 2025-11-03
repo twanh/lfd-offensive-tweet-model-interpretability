@@ -137,8 +137,7 @@ def compute_shap_values(
     tweet: str,
     word_to_idx: dict,
     nlp,
-    model,
-    background_size: int = 50,
+    explainer,
 ) -> SHAPResult:
     """
     Compute SHAP values for a single tweet.
@@ -149,26 +148,26 @@ def compute_shap_values(
     # Convert to sequences
     token_ids = texts_to_sequences([tokens], word_to_idx)[0]
 
-    # Pad to MAX_LEN
-    token_ids_padded = pad_sequences([token_ids], maxlen=MAX_LEN)[0]
-
-    # Create background dataset (random padded sequences)
-    background = np.random.randint(
-        0, len(word_to_idx), size=(background_size, MAX_LEN),
-    )
-
-    # Create SHAP explainer for Keras model
-    explainer = shap.DeepExplainer(
-        model,
-        background,
-    )
+    # Pad to MAX_LEN (match background format)
+    token_ids_padded = pad_sequences(
+        [token_ids],
+        maxlen=MAX_LEN,
+        padding='post',
+        truncating='post',
+    )[0]
 
     # Compute SHAP values
     shap_values = explainer.shap_values(
         np.array([token_ids_padded]),
     )
 
-    shap_values_offensive = shap_values[1][0]
+    # Handle different output formats from SHAP
+    if isinstance(shap_values, list):
+        # Binary classification - get positive class (index 1)
+        shap_values_offensive = shap_values[1][0]
+    else:
+        # Single output
+        shap_values_offensive = shap_values[0]
 
     return {
         'tokens': tokens,
@@ -235,6 +234,25 @@ def main() -> int:
     tweets, labels = read_corpus(args.input_file)
     print(f'Loaded {len(tweets)} tweets')
 
+    # Create background dataset from a sample of tweets
+    print('Creating background dataset for SHAP...')
+    background_size = min(50, len(tweets))
+    background_tweets = tweets[:background_size]
+
+    # Tokenize and convert background tweets to sequences
+    background_tokens = spacy_tokenizer(nlp, background_tweets)
+    background_sequences = texts_to_sequences(background_tokens, word_to_idx)
+    background_padded = pad_sequences(
+        background_sequences,
+        maxlen=MAX_LEN,
+        padding='post',
+        truncating='post',
+    )
+
+    # Create SHAP explainer once with background data
+    print('Creating SHAP explainer...')
+    explainer = shap.DeepExplainer(model, background_padded)
+
     # Process all tweets
     per_sample_importances = []
     top_k_words = []
@@ -250,7 +268,7 @@ def main() -> int:
                 tweet,
                 word_to_idx,
                 nlp,
-                model,
+                explainer,
             )
 
             # Aggregate to words
