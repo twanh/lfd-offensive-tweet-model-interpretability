@@ -4,6 +4,7 @@ from collections import Counter
 from typing import TypedDict
 
 import numpy as np
+import torch
 from captum.attr import IntegratedGradients
 from tqdm import tqdm
 from transformers import AutoModelForSequenceClassification
@@ -123,6 +124,24 @@ def get_token_to_word_mapping(tokens: list[str]) -> list[int]:
     return token_to_word
 
 
+def create_forward_func(model, attention_mask, token_type_ids):
+    """
+    Create a forward function that takes embeddings as input.
+
+    This is necessary because IntegratedGradients interpolates between
+    baseline and input, creating float tensors that can't be used
+    directly as embedding indices.
+    """
+    def forward_func(inputs_embeds):
+        return model(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+        ).logits
+
+    return forward_func
+
+
 def compute_attributions(
     tweet: str,
     model: AutoModelForSequenceClassification,
@@ -154,12 +173,21 @@ def compute_attributions(
     attention_mask = encoding['attention_mask'].to(device)
     token_type_ids = encoding['token_type_ids'].to(device)
 
-    ig = IntegratedGradients(model)
+    # Get the embeddings from input_ids
+    # For BERT models, the embeddings are in model.bert.embeddings.word_embeddings
+    embeddings = model.bert.embeddings.word_embeddings(input_ids)
+
+    # Create a baseline (zeros with the same shape as embeddings)
+    baseline = torch.zeros_like(embeddings)
+
+    # Create forward function that takes embeddings
+    forward_func = create_forward_func(model, attention_mask, token_type_ids)
+
+    ig = IntegratedGradients(forward_func)
     attributions = ig.attribute(
-        inputs=input_ids,
-        baselines=None,
+        inputs=embeddings,
+        baselines=baseline,
         target=target_class,
-        additional_forward_args=(attention_mask, token_type_ids),
         n_steps=50,
     )
 
@@ -266,19 +294,11 @@ def main() -> int:
 
     label_to_class = create_label_to_class_mapping(labels)
 
-
-    print(f'DEBUG: Label to class mapping: {label_to_class}')
-    print(f'DEBUG: Unique labels in data: {set(labels)}')
-
     for tweet, label in tqdm(
         zip(tweets, labels),
         total=len(tweets),
         unit='tweet',
     ):
-
-        print(f'DEBUG: {label=}, {label_to_class[label]=}')
-
-
 
         try:
             # Compute the attribution
@@ -290,19 +310,11 @@ def main() -> int:
                 label_to_class[label],
             )
 
-            print(f'DEBUG: tokens={attributions["tokens"]}')
-            print(f'DEBUG: token_importances shape={attributions["token_importances"].shape}')
-            print(f'DEBUG: token_importances={attributions["token_importances"][:10]}')
-
             # Aggregate the subwords to the words
             words, importances = aggregate_subwords_to_words(
                 attributions['token_importances'],
                 attributions['tokens'],
             )
-
-            # Debug: Check aggregation
-            print(f'DEBUG: words after aggregation={words}')
-            print(f'DEBUG: importances after aggregation={importances}')
 
             # Extract the top k words
             word_importances, top_k = extract_top_k_words(
@@ -310,8 +322,6 @@ def main() -> int:
                 importances,
                 k=args.k,
             )
-
-            print(f'DEBUG: top_k={top_k}')
 
             per_sample_importances.append(word_importances)
             top_k_words.append(top_k)
