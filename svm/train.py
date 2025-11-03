@@ -22,20 +22,20 @@ def create_arg_parser() -> argparse.Namespace:
     parser.add_argument(
         'train_file',
         help='The train file',
-        type=str
+        type=str,
     )
 
     parser.add_argument(
         'dev_file',
         help='The dev file',
-        type=str
+        type=str,
     )
 
     parser.add_argument(
         '-t', '--test-file',
         help='The test file to run the evaluation on',
         default=None,
-        type=str
+        type=str,
     )
 
     parser.add_argument(
@@ -76,7 +76,7 @@ def create_arg_parser() -> argparse.Namespace:
 
 
 def read_corpus(
-    file: str
+    file: str,
 ) -> tuple[list[str], list[str]]:
 
     tweets = []
@@ -143,7 +143,7 @@ def main() -> int:
         best_model = None
 
         print('Performing Grid Search')
-        for C, kernel, gamma in product(
+        for C, kernel, gamma in product(  # type: ignore
             grid_params['C'],
             grid_params['kernel'],
             grid_params['gamma'],
