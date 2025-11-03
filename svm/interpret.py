@@ -88,7 +88,7 @@ def extract_per_sample_importances(
     X_dense = X_test_vec.toarray()
 
     # Iterate over the test samples
-    for i in tqdm(len(X_dense.shape[0])):
+    for i in tqdm(range(X_dense.shape[0])):
 
         # Get the TF-IDF values for the sample
         tfidf_values = X_dense[i]
