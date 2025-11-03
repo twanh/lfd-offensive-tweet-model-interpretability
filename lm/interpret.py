@@ -62,6 +62,20 @@ def create_arg_parser() -> argparse.Namespace:
         default='cuda',
     )
 
+    parser.add_argument(
+        '--verbose',
+        help='Enable result printing at the end',
+        action='store_true',
+        default=True,
+    )
+
+    parser.add_argument(
+        '--no-verbose',
+        help='Disable result printing at the end',
+        action='store_false',
+        dest='verbose',
+    )
+
     return parser.parse_args()
 
 
@@ -129,9 +143,9 @@ def create_forward_func(model, attention_mask, token_type_ids):
     Create a forward function that takes embeddings as input.
 
     This is necessary because IntegratedGradients interpolates between
-    baseline and input, creating float tensors that can't be used
-    directly as embedding indices.
+    baseline and input.
     """
+
     def forward_func(inputs_embeds):
         return model(
             inputs_embeds=inputs_embeds,
@@ -153,6 +167,7 @@ def compute_attributions(
     Compute Integrated Gradients attributions for the input.
 
     We do this by:
+
     - Tokenizing the tweet
     - Computing the Integrated Gradients attributions
     - Summing the attributions over the embedding dimension
@@ -174,7 +189,6 @@ def compute_attributions(
     token_type_ids = encoding['token_type_ids'].to(device)
 
     # Get the embeddings from input_ids
-    # For BERT models, the embeddings are in model.bert.embeddings.word_embeddings
     embeddings = model.bert.embeddings.word_embeddings(input_ids)
 
     # Create a baseline (zeros with the same shape as embeddings)
@@ -341,25 +355,27 @@ def main() -> int:
         'model_type': 'BERT',
     }
 
-    # Print the top k words for the full dataset
-    print(f'Top {args.k} words for the full dataset:')
-    for i, words in enumerate(top_k_words):
-        print(f'Tweet {i+1}: {words}')
-        print('-' * 80)
-        for word in words:
-            print(
-                f'  - {word:<20} | Importance: {per_sample_importances[i][word]:.4f}',  # noqa: E501
-            )
-        print('-' * 80)
+    if args.verbose:
+        # Print the top k words for the full dataset
+        print(f'Top {args.k} words for the full dataset:')
+        for i, words in enumerate(top_k_words):
+            print(f'Tweet {i+1}: {words}')
+            print('-' * 80)
+            # Print as a nice table
+            for word in words:
+                print(
+                    f'  - {word:<20} | Importance: {per_sample_importances[i][word]:.4f}',  # noqa: E501
+                )
+            print('-' * 80)
 
-    token_frequencies = Counter()
-    for top_k in top_k_words:
-        token_frequencies.update(top_k)
+        token_frequencies: Counter[str] = Counter()
+        for top_k in top_k_words:
+            token_frequencies.update(top_k)
 
-    # Print the top k words sorted by importance
-    print(f'Top {args.k} words for the full dataset sorted by importance:')
-    for word, frequency in token_frequencies.most_common(args.k):
-        print(f'  - {word:<20} | Frequency: {frequency}')
+        # Print the top k words sorted by importance
+        print(f'Top {args.k} words for the full dataset sorted by importance:')
+        for word, frequency in token_frequencies.most_common(args.k):
+            print(f'  - {word:<20} | Frequency: {frequency}')
 
     with open(args.output_file, 'wb') as f:
         pickle.dump(results, f)
