@@ -266,11 +266,16 @@ def main() -> int:
 
     label_to_class = create_label_to_class_mapping(labels)
 
+    print(f'DEBUG: Label to class mapping: {label_to_class}')
+    print(f'DEBUG: Unique labels in data: {set(labels)}')
+
     for tweet, label in tqdm(
         zip(tweets, labels),
         total=len(tweets),
         unit='tweet',
     ):
+
+        print(f'DEBUG: {label=}, {label_to_class[label]=}')
 
         try:
             # Compute the attribution
@@ -282,17 +287,32 @@ def main() -> int:
                 label_to_class[label],
             )
 
+            print(f'DEBUG: tokens={attributions["tokens"]}')
+            print(
+                f'DEBUG: token_importances shape={attributions["token_importances"].shape}',
+            )
+            print(
+                f'DEBUG: token_importances={attributions["token_importances"][:10]}',
+            )
+
             # Aggregate the subwords to the words
             words, importances = aggregate_subwords_to_words(
                 attributions['token_importances'],
                 attributions['tokens'],
             )
+
+            # Debug: Check aggregation
+            print(f'DEBUG: words after aggregation={words}')
+            print(f'DEBUG: importances after aggregation={importances}')
+
             # Extract the top k words
             word_importances, top_k = extract_top_k_words(
                 words,
                 importances,
                 k=args.k,
             )
+
+            print(f'DEBUG: top_k={top_k}')
 
             per_sample_importances.append(word_importances)
             top_k_words.append(top_k)
