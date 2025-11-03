@@ -14,10 +14,11 @@ from keras.layers import Dense
 from keras.layers import Embedding
 from keras.layers import LSTM
 from keras.models import Sequential
+from sklearn.metrics import classification_report
 from sklearn.model_selection import ParameterGrid
 from sklearn.preprocessing import LabelBinarizer
-from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.utils import to_categorical
 
 MAX_LEN = 50  # Maximum sequence length for padding
 
@@ -259,9 +260,13 @@ def main():
     # Use transform, not fit_transform for dev
     Y_dev_encoded = encoder.transform(Y_dev)
 
-    Y_train_int = np.argmax(Y_train_encoded, axis=1) if len(Y_train_encoded.shape) > 1 and Y_train_encoded.shape[1] > 1 else Y_train_encoded.flatten()
-    Y_dev_int = np.argmax(Y_dev_encoded, axis=1) if len(Y_dev_encoded.shape) > 1 and Y_dev_encoded.shape[1] > 1 else Y_dev_encoded.flatten()
-            
+    Y_train_int = np.argmax(Y_train_encoded, axis=1) if len(
+        Y_train_encoded.shape,
+    ) > 1 and Y_train_encoded.shape[1] > 1 else Y_train_encoded.flatten()
+    Y_dev_int = np.argmax(Y_dev_encoded, axis=1) if len(
+        Y_dev_encoded.shape,
+    ) > 1 and Y_dev_encoded.shape[1] > 1 else Y_dev_encoded.flatten()
+
     num_classes = len(encoder.classes_)
     Y_train_bin = to_categorical(Y_train_int, num_classes=num_classes)
     Y_dev_bin = to_categorical(Y_dev_int, num_classes=num_classes)
@@ -359,6 +364,65 @@ def main():
         with open(os.path.join(args.save_model_dir, 'training_params.json'), 'w') as f:
             json.dump(params, f)
         print('Artifacts saved successfully.')
+
+    # Evaluate on dev set
+    dev_loss, dev_acc = final_model.evaluate(X_dev_seq, Y_dev_bin, verbose=0)
+    Y_dev_pred = final_model.predict(X_dev_seq, verbose=0)
+    Y_dev_pred_label = np.argmax(Y_dev_pred, axis=1)
+    Y_dev_true_label = np.argmax(Y_dev_bin, axis=1)
+
+    dev_report = classification_report(
+        Y_dev_true_label,
+        Y_dev_pred_label,
+        target_names=encoder.classes_,
+        digits=4,
+    )
+    print(f'[DEV] Accuracy: {dev_acc:.4f}')
+    print('[DEV] Classification Report:\n' + dev_report)
+
+    # Evaluate on test set (if provided)
+    if args.test_file is not None:
+        # Load and process test data
+        X_test = []
+        Y_test = []
+        with open(args.test_file, encoding='utf-8') as fin:
+            for line in fin:
+                if not line.strip() or line.startswith('#'):
+                    continue
+                parts = line.strip().split('\t')
+                if len(parts) < 2:
+                    continue
+                text, label = parts[0], parts[-1]
+                X_test.append(text)
+                Y_test.append(label)
+        X_test_tok = [tokenizer(text) for text in X_test]
+        X_test_idx = [
+            [word_to_idx.get(tok.text.lower(), 1) for tok in doc]
+            for doc in X_test_tok
+        ]
+        X_test_seq = pad_sequences(X_test_idx, maxlen=MAX_LEN, padding='post')
+        Y_test_enc = encoder.transform(Y_test)
+        if len(Y_test_enc.shape) == 1:
+            Y_test_bin = to_categorical(
+                Y_test_enc, num_classes=len(encoder.classes_),
+            )
+        else:
+            Y_test_bin = Y_test_enc
+
+        test_loss, test_acc = final_model.evaluate(
+            X_test_seq, Y_test_bin, verbose=0,
+        )
+        Y_test_pred = final_model.predict(X_test_seq, verbose=0)
+        Y_test_pred_label = np.argmax(Y_test_pred, axis=1)
+        Y_test_true_label = np.argmax(Y_test_bin, axis=1)
+        test_report = classification_report(
+            Y_test_true_label,
+            Y_test_pred_label,
+            target_names=encoder.classes_,
+            digits=4,
+        )
+        print(f'[TEST] Accuracy: {test_acc:.4f}')
+        print('[TEST] Classification Report:\n' + test_report)
 
 
 if __name__ == '__main__':
