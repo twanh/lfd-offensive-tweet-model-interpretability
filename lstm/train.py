@@ -380,41 +380,32 @@ def main():
     print(f'[DEV] Accuracy: {dev_acc:.4f}')
     print('[DEV] Classification Report:\n' + dev_report)
 
-    # Evaluate on test set (if provided)
-    if args.test_file is not None:
-        # Load and process test data
-        X_test = []
-        Y_test = []
-        with open(args.test_file, encoding='utf-8') as fin:
-            for line in fin:
-                if not line.strip() or line.startswith('#'):
-                    continue
-                parts = line.strip().split('\t')
-                if len(parts) < 2:
-                    continue
-                text, label = parts[0], parts[-1]
-                X_test.append(text)
-                Y_test.append(label)
-        X_test_tok = [spacy_tokenizer(text) for text in X_test]
-        X_test_idx = [
-            [word_to_idx.get(tok.text.lower(), 1) for tok in doc]
-            for doc in X_test_tok
-        ]
-        X_test_seq = pad_sequences(X_test_idx, maxlen=MAX_LEN, padding='post')
-        Y_test_enc = encoder.transform(Y_test)
-        if len(Y_test_enc.shape) == 1:
-            Y_test_bin = to_categorical(
-                Y_test_enc, num_classes=len(encoder.classes_),
-            )
-        else:
-            Y_test_bin = Y_test_enc
-
-        test_loss, test_acc = final_model.evaluate(
-            X_test_seq, Y_test_bin, verbose=0,
+    # Evaluate on test set if provided
+    if args.test_file:
+        print('--- Evaluating on Test Set ---')
+        X_test, Y_test = read_corpus(args.test_file)
+        X_test_tokens = spacy_tokenizer(nlp, X_test)
+        
+        # Use transform for test labels (don't refit encoder)
+        Y_test_encoded = encoder.transform(Y_test)
+        Y_test_int = np.argmax(Y_test_encoded, axis=1) if len(
+            Y_test_encoded.shape,
+        ) > 1 and Y_test_encoded.shape[1] > 1 else Y_test_encoded.flatten()
+        Y_test_bin = to_categorical(Y_test_int, num_classes=num_classes)
+        
+        # Convert to padded sequences
+        X_test_seq = pad_sequences(
+            texts_to_sequences(
+                X_test_tokens, word_to_idx,
+            ), maxlen=MAX_LEN,
         )
+        
+        # Evaluate on test set
+        test_loss, test_acc = final_model.evaluate(X_test_seq, Y_test_bin, verbose=0)
         Y_test_pred = final_model.predict(X_test_seq, verbose=0)
         Y_test_pred_label = np.argmax(Y_test_pred, axis=1)
         Y_test_true_label = np.argmax(Y_test_bin, axis=1)
+        
         test_report = classification_report(
             Y_test_true_label,
             Y_test_pred_label,
@@ -424,6 +415,7 @@ def main():
         print(f'[TEST] Accuracy: {test_acc:.4f}')
         print('[TEST] Classification Report:\n' + test_report)
 
+    
 
 if __name__ == '__main__':
     main()
