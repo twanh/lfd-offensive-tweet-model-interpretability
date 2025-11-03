@@ -1,6 +1,7 @@
 import argparse
 import json
 import pickle
+from collections import Counter
 from typing import TypedDict
 
 import numpy as np
@@ -83,19 +84,27 @@ def read_corpus(file: str) -> tuple[list[str], list[str]]:
     return tweets, labels
 
 
-def spacy_tokenizer(nlp: spacy.language.Language, texts: list[str]) -> list[list[str]]:
+def spacy_tokenizer(
+    nlp: spacy.language.Language,
+    texts: list[str],
+) -> list[list[str]]:
     """Tokenize texts using SpaCy (same as training)."""
     all_tokenized_texts = []
     for doc in nlp.pipe(
         texts,
-        disable=['parser', 'ner', 'tagger', 'lemmatizer', 'attribute_ruler'],
+        disable=[
+            'parser', 'ner', 'tagger', 'lemmatizer', 'attribute_ruler',
+        ],
     ):
         doc_tokens = [token.text for token in doc]
         all_tokenized_texts.append(doc_tokens)
     return all_tokenized_texts
 
 
-def texts_to_sequences(tokenized_texts: list[list[str]], word_to_idx: dict) -> list[list[int]]:
+def texts_to_sequences(
+    tokenized_texts: list[list[str]],
+    word_to_idx: dict,
+) -> list[list[int]]:
     """Convert tokenized texts to integer sequences."""
     return [
         [word_to_idx.get(word, word_to_idx.get('<unk>', 1)) for word in text]
@@ -194,8 +203,8 @@ def identify_globally_important_tokens(
     n: int = 20,
 ) -> list[tuple[str, int]]:
     """Get most frequent tokens in top-k."""
-    from collections import Counter
-    token_frequencies = Counter()
+
+    token_frequencies: Counter[str] = Counter()
     for top_k in top_k_words_per_sample:
         token_frequencies.update(top_k)
     return token_frequencies.most_common(n)
@@ -264,7 +273,7 @@ def main() -> int:
     global_tokens = identify_globally_important_tokens(top_k_words, n=20)
 
     print('\n' + '='*70)
-    print(f'Top 20 Globally Important Tokens (LSTM)')
+    print('Top 20 Globally Important Tokens (LSTM)')
     print('='*70)
     for i, (token, freq) in enumerate(global_tokens, 1):
         print(f'  {i:2d}. {token:<20} (frequency: {freq})')
