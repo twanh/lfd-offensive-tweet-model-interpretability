@@ -138,7 +138,6 @@ def compute_shap_values(
     word_to_idx: dict,
     nlp,
     model,
-    predict_func,
     background_size: int = 50,
 ) -> SHAPResult:
     """
@@ -160,7 +159,7 @@ def compute_shap_values(
 
     # Create SHAP explainer for Keras model
     explainer = shap.DeepExplainer(
-        predict_func,
+        model,
         background,
     )
 
@@ -236,9 +235,6 @@ def main() -> int:
     tweets, labels = read_corpus(args.input_file)
     print(f'Loaded {len(tweets)} tweets')
 
-    # Create prediction function for SHAP
-    predict_func = create_prediction_function(model)
-
     # Process all tweets
     per_sample_importances = []
     top_k_words = []
@@ -255,7 +251,6 @@ def main() -> int:
                 word_to_idx,
                 nlp,
                 model,
-                predict_func,
             )
 
             # Aggregate to words
